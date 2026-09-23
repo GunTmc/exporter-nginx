@@ -1,0 +1,27 @@
+[Unit]
+Description=Laporan harian access log nginx (nginxlogreport)
+
+[Service]
+Type=oneshot
+# Jalankan sebagai user khusus yang hanya boleh membaca log dan menulis ke REPORT_DIR
+User=nginxlogreport
+Group=nginxlogreport
+Environment=REPORT_DATE=yesterday
+ExecStart=/opt/nginxlogreport/deploy/nginxlogreport-daily.sh
+
+# Pembatasan: layanan ini hanya membaca log dan menulis laporan
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=yes
+# Sesuaikan dengan LOG_DIR dan REPORT_DIR di /etc/default/nginxlogreport
+ReadOnlyPaths=/var/log/nginx
+ReadWritePaths=/var/reports

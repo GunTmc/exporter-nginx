@@ -1,0 +1,12 @@
+[Unit]
+Description=Jadwal harian nginxlogreport
+
+[Timer]
+# Sesudah tengah malam, untuk log kemarin yang sudah lengkap
+OnCalendar=*-*-* 00:15:00
+RandomizedDelaySec=120
+# Bila mesin mati saat jadwal, jalankan begitu menyala lagi
+Persistent=true
+
+[Install]
+WantedBy=timers.target

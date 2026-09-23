@@ -1,0 +1,23 @@
+# dependensi (bun.lock sengaja di-commit; bun.lockb adalah format biner lama)
+node_modules/
+bun.lockb
+
+# laporan dan log (bisa memuat IP/aktivitas pengguna nyata; jangan pernah di-commit)
+*.log
+*.log.gz
+/report.html
+/reports/
+/data.json
+/big.log
+
+# contoh yang sengaja disimpan (data sintetis)
+!/examples/sample.log
+!/examples/sample-report.html
+
+# lain-lain
+*.tmp
+*.zip
+.env
+.env.*
+!.env.example
+.DS_Store

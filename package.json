@@ -1,0 +1,30 @@
+{
+  "name": "nginxlogreport",
+  "version": "1.0.0",
+  "description": "Laporan HTML dari access log nginx: grup per endpoint/status/IP/User-Agent, timeline, filter, tanpa server",
+  "bin": {
+    "nginxlogreport": "./src/nginxlogreport.ts"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "start": "bun src/nginxlogreport.ts",
+    "typecheck": "bun --bun tsc -p tsconfig.json",
+    "test": "bun test ./test/",
+    "sample": "bun test/make-sample-log.ts --out=examples/sample.log && bun src/nginxlogreport.ts examples/sample.log --out=examples/sample-report.html",
+    "docker:build": "docker build -t nginxlogreport:local ."
+  },
+  "engines": {
+    "bun": ">=1.4.0"
+  },
+  "license": "MIT",
+  "private": true,
+  "packageManager": "bun@1.4.0",
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "typescript": "^7.0.2"
+  }
+}

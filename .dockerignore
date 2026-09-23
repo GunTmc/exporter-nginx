@@ -1,0 +1,17 @@
+# Log dan laporan bisa memuat aktivitas pengguna nyata: jangan pernah masuk ke build context atau image
+**/*.log
+**/*.log.gz
+reports
+report.html
+data.json
+examples
+
+# tidak diperlukan untuk build
+.git
+.github
+node_modules
+*.md
+.env
+.env.*
+Dockerfile
+.dockerignore

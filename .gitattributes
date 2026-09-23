@@ -1,0 +1,14 @@
+* text=auto eol=lf
+
+*.html diff=html
+*.md diff=markdown
+*.log -diff
+*.gz binary
+*.zip binary
+
+# tidak ikut arsip `git archive`
+/.github export-ignore
+/test export-ignore
+/examples export-ignore
+/Dockerfile export-ignore
+/.dockerignore export-ignore

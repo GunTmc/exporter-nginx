@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="data:,">
+<title>Nginx Access Log Report</title>
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#f3f4f1; --panel:#ffffff; --panel2:#eef0ec; --text:#182029; --muted:#667180; --border:#d9ddd6;
+  --accent:#1f5eff; --accent-soft:#e3ebff; --err:#c9283b; --err-soft:#fde7e9; --warn:#a56a00; --warn-soft:#fff1d6;
+  --ok:#0a8a5f; --ok-soft:#e1f5ec;
+  --m-get:#1f5eff; --m-post:#0a8a5f; --m-put:#a56a00; --m-delete:#c9283b; --m-oth:#6b7280;
+  --shadow:0 8px 30px rgba(20,30,40,.18);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#12161b; --panel:#1a2027; --panel2:#222a33; --text:#e6eaef; --muted:#93a0af; --border:#2c3641;
+    --accent:#6f9bff; --accent-soft:#1f2c4d; --err:#ff6b7a; --err-soft:#3a1c22; --warn:#f0b34a; --warn-soft:#3a2d12;
+    --ok:#4fd1a1; --ok-soft:#123326;
+    --shadow:0 8px 30px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12161b; --panel:#1a2027; --panel2:#222a33; --text:#e6eaef; --muted:#93a0af; --border:#2c3641;
+  --accent:#6f9bff; --accent-soft:#1f2c4d; --err:#ff6b7a; --err-soft:#3a1c22; --warn:#f0b34a; --warn-soft:#3a2d12;
+  --ok:#4fd1a1; --ok-soft:#123326;
+  --shadow:0 8px 30px rgba(0,0,0,.5);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.mono,code,pre{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding:16px}
+
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between;margin-bottom:12px}
+.top h1{font-size:20px;margin:0;font-weight:700;letter-spacing:-.01em}
+.top .sub{color:var(--muted);font-size:13px}
+.btn{border:1px solid var(--border);background:var(--panel);border-radius:8px;padding:6px 12px}
+.btn:hover{background:var(--panel2)}
+.note{background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:13px}
+.note.warn{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 14px}
+.stat b{font-size:24px;line-height:1.2;display:block}
+.stat span{color:var(--muted);font-size:12.5px}
+.stat.err b{color:var(--err)}
+
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;margin-bottom:12px}
+.panel h2{font-size:13.5px;margin:0;padding:10px 14px;border-bottom:1px solid var(--border);font-weight:600;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.panel h2 small{font-weight:400;color:var(--muted)}
+.pad{padding:12px 14px}
+
+.tl{display:flex;align-items:flex-end;justify-content:center;gap:3px;height:84px;padding:8px 14px 0}
+.tl .bar{flex:1;max-width:56px;min-width:4px;background:color-mix(in srgb,var(--accent) 45%,transparent);border:0;border-radius:3px 3px 0 0;min-height:3px;padding:0}
+.tl .bar:hover:not(:disabled){background:var(--accent)}
+.tl .bar.sel{background:var(--accent)}
+.tl .bar.zero{background:var(--border);min-height:2px;cursor:default}
+.tl-axis{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;padding:4px 14px 8px}
+.tl.mini{height:44px;padding:4px 0 0}
+
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 14px}
+.filters input[type=search]{flex:1 1 220px;min-width:180px}
+.filters input,.filters select{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-height:34px}
+.filters label{color:var(--muted);font-size:12.5px;display:flex;align-items:center;gap:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 12px}
+.chip{background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);border-radius:999px;padding:2px 4px 2px 10px;font-size:12.5px;display:inline-flex;align-items:center;gap:4px}
+.chip button{border:0;background:transparent;border-radius:999px;width:20px;height:20px;line-height:1}
+
+.views{display:flex;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.views button{border:1px solid var(--border);background:transparent;border-radius:999px;padding:4px 12px}
+.views button[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{font-weight:600;font-size:12.5px;color:var(--muted);text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--panel2)}
+tbody tr:last-child td{border-bottom:0}
+.cnt{font-weight:700;font-size:16px;white-space:nowrap}
+.cbar{height:4px;border-radius:2px;background:var(--accent);margin-top:4px;opacity:.7}
+.path-c{font-weight:600;word-break:break-all;max-width:420px}
+.empty{padding:32px 14px;text-align:center;color:var(--muted)}
+
+.badge{display:inline-block;border-radius:6px;padding:0 7px;font-size:12px;font-weight:600;line-height:20px;white-space:nowrap;margin-right:4px}
+.b-GET{color:var(--m-get);background:color-mix(in srgb,var(--m-get) 14%,transparent)}
+.b-POST{color:var(--m-post);background:color-mix(in srgb,var(--m-post) 14%,transparent)}
+.b-PUT{color:var(--m-put);background:color-mix(in srgb,var(--m-put) 14%,transparent)}
+.b-PATCH{color:var(--m-put);background:color-mix(in srgb,var(--m-put) 14%,transparent)}
+.b-DELETE{color:var(--m-delete);background:color-mix(in srgb,var(--m-delete) 14%,transparent)}
+.b-2{color:var(--ok);background:var(--ok-soft)}
+.b-3{color:var(--warn);background:var(--warn-soft)}
+.b-4{color:var(--err);background:var(--err-soft)}
+.b-5{color:var(--err);background:var(--err-soft)}
+
+.scrim{position:fixed;inset:0;background:rgba(10,15,20,.45);opacity:0;pointer-events:none;transition:opacity .18s;z-index:20}
+.scrim.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(720px,100%);background:var(--panel);border-left:1px solid var(--border);box-shadow:var(--shadow);transform:translateX(102%);transition:transform .2s ease;z-index:21;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.drawer.open{transform:none}
+.dhead{padding:14px 16px 10px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:flex-start}
+.dhead h3{margin:0;font-size:15px;line-height:1.35;word-break:break-word}
+.dhead .x{margin-left:auto;border:1px solid var(--border);background:var(--bg);border-radius:8px;width:34px;height:34px;flex:none}
+.dbody{overflow:auto;padding:14px 16px 24px;flex:1}
+.ov{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px}
+.ov div{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px}
+.ov small{display:block;color:var(--muted);font-size:12px}
+.ov span{font-size:13px;word-break:break-word}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:12px;overflow-x:auto}
+.tabs button{border:0;background:transparent;padding:8px 12px;border-bottom:2px solid transparent;white-space:nowrap;color:var(--muted)}
+.tabs button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+.samples{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.samples button{border:1px solid var(--border);background:transparent;border-radius:999px;padding:2px 10px;font-size:12.5px}
+.samples button[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
+pre.raw{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;overflow:auto;font-size:12px;line-height:1.55;margin:0;max-height:60vh;white-space:pre-wrap;word-break:break-all}
+.rawbar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;color:var(--muted);font-size:12.5px}
+@media (prefers-reduced-motion: reduce){.drawer,.scrim{transition:none}}
+</style>
+</head>
+<body>
+<noscript><div style="padding:16px;font-family:sans-serif">Laporan ini membutuhkan JavaScript untuk ditampilkan.</div></noscript>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1 id="title">Nginx Access Log Report</h1>
+      <div class="sub" id="fileinfo"></div>
+    </div>
+    <button class="btn" id="theme">Tema</button>
+  </div>
+
+  <div class="note" id="modenote"></div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="panel">
+    <h2>Timeline <small id="tlinfo">Klik satu batang untuk memfilter waktu</small></h2>
+    <div class="tl" id="tl"></div>
+    <div class="tl-axis"><span id="tl-a"></span><span id="tl-b"></span></div>
+  </div>
+
+  <div class="panel">
+    <div class="filters">
+      <input type="search" id="q" placeholder="Cari path, IP, atau kata kunci pencarian…" aria-label="Cari">
+      <select id="f-status" aria-label="Status"></select>
+      <select id="f-method" aria-label="Method"></select>
+      <label>Urutkan
+        <select id="sort">
+          <option value="count">Jumlah terbanyak</option>
+          <option value="last">Terbaru</option>
+          <option value="first">Terlama</option>
+        </select>
+      </label>
+      <button class="btn" id="reset">Reset filter</button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="panel">
+    <div class="views" role="group" aria-label="Kelompokkan berdasarkan">
+      <button data-view="endpoint" aria-pressed="true">Per endpoint</button>
+      <button data-view="status" aria-pressed="false">Per status code</button>
+      <button data-view="ip" aria-pressed="false">Per IP</button>
+      <button data-view="ua" aria-pressed="false">Per User-Agent</button>
+    </div>
+    <div class="tablewrap" id="tablewrap"></div>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-label="Detail endpoint"></aside>
+
+<script>
+const REPORT = /*__DATA__*/null;
+
+const $ = id => document.getElementById(id);
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmt(ts, withDate){
+  const d = new Date(ts*1000);
+  const time = d.toISOString().slice(11,19);
+  return withDate ? d.toISOString().slice(0,10)+' '+time : time;
+}
+function mbadge(m){ return `<span class="badge b-${esc(m)}">${esc(m)}</span>`; }
+function sbadge(s){ const bucket = Math.floor(s/100); return `<span class="badge b-${bucket}">${s}</span>`; }
+function shortUa(ua){
+  if (!ua || ua === '-') return 'Tidak ada';
+  if (/curl\//i.test(ua)) return 'curl';
+  if (/PostmanRuntime/i.test(ua)) return 'Postman';
+  if (/python-requests|axios|okhttp|go-http-client/i.test(ua)) return 'HTTP client (script)';
+  if (/bot|spider|crawl|slurp/i.test(ua)) return 'Bot / crawler';
+  let browser = 'Browser lain';
+  if (/Edg\//.test(ua)) browser = 'Edge';
+  else if (/OPR\//.test(ua)) browser = 'Opera';
+  else if (/Chrome\//.test(ua) && !/Chromium/.test(ua)) browser = 'Chrome';
+  else if (/Firefox\//.test(ua)) browser = 'Firefox';
+  else if (/Safari\//.test(ua) && !/Chrome/.test(ua)) browser = 'Safari';
+  let os = '';
+  if (/Windows/.test(ua)) os = 'Windows';
+  else if (/Mac OS X/.test(ua)) os = 'macOS';
+  else if (/Android/.test(ua)) os = 'Android';
+  else if (/iPhone|iPad|iPod/.test(ua)) os = 'iOS';
+  else if (/Linux/.test(ua)) os = 'Linux';
+  return os ? `${browser} · ${os}` : browser;
+}
+
+let DATA = [];
+const S = { q:'', status:'', method:'', sort:'count', view:'endpoint', from:null, to:null };
+let TMIN, TMAX, CUR_B = null;
+let openId = null, openTab = 'occ', openSample = 0;
+
+function build(){
+  DATA = REPORT.groups;
+  TMIN = REPORT.meta.tMin;
+  TMAX = REPORT.meta.tMax;
+}
+
+function baseFiltered(){
+  return DATA.filter(g => {
+    if (S.status && String(Math.floor(g.status/100)) !== S.status) return false;
+    if (S.method && g.method !== S.method) return false;
+    if (S.q) {
+      const q = S.q.toLowerCase();
+      const inPath = g.path.toLowerCase().includes(q);
+      const inIp = g.ips.some(ip => ip.includes(q));
+      const inSearch = g.searchTerms.some(s => s.term.toLowerCase().includes(q));
+      const inUa = g.uas.some(u => u.ua.toLowerCase().includes(q));
+      if (!inPath && !inIp && !inSearch && !inUa) return false;
+    }
+    return true;
+  });
+}
+function withTime(rows){
+  if (S.from == null && S.to == null) return rows;
+  return rows.filter(g => g.occ.some(t => (S.from==null||t>=S.from) && (S.to==null||t<=S.to)));
+}
+
+function buckets(occArr, tmin, tmax){
+  const span = Math.max(1, tmax - tmin);
+  const n = 48;
+  const step = Math.max(60, Math.ceil(span / n));
+  const arr = [];
+  for (let s = tmin; s <= tmax; s += step) arr.push({s, e: s+step, c:0});
+  if (!arr.length) arr.push({s:tmin, e:tmax+1, c:0});
+  for (const t of occArr) {
+    const idx = Math.min(arr.length-1, Math.floor((t - tmin) / step));
+    if (arr[idx]) arr[idx].c++;
+  }
+  return { arr, step };
+}
+function tlHtml(b, big){
+  const max = Math.max(1, ...b.arr.map(x=>x.c));
+  return b.arr.map((x,i) => {
+    const h = x.c ? Math.max(3, Math.round((x.c/max)*(big?76:36))) : 2;
+    const sel = S.from===x.s && S.to===x.e-1 ? 'sel':'';
+    const zero = x.c===0 ? 'zero':'';
+    return `<button class="bar ${sel} ${zero}" style="height:${h}px" data-b="${i}" ${x.c?'':'disabled'} title="${fmt(x.s,true)} — ${x.c} request"></button>`;
+  }).join('');
+}
+function renderTimeline(rows){
+  const allOcc = rows.flatMap(g => g.occ);
+  const b = buckets(allOcc, TMIN, TMAX);
+  CUR_B = b;
+  $('tl').innerHTML = tlHtml(b, true);
+  $('tl-a').textContent = fmt(TMIN, true);
+  $('tl-b').textContent = fmt(TMAX, true);
+}
+
+function renderStats(rows){
+  const total = rows.reduce((a,g)=>a+g.count,0);
+  const errs = rows.filter(g=>g.status>=400).reduce((a,g)=>a+g.count,0);
+  const ips = new Set(rows.flatMap(g=>g.ips)).size;
+  const paths = new Set(rows.map(g=>g.path)).size;
+  const avgSize = rows.length ? Math.round(rows.reduce((a,g)=>a+g.avgSize*g.count,0)/Math.max(1,total)) : 0;
+  const items = [
+    {n: total.toLocaleString('id-ID'), l:'Total request', cls:''},
+    {n: errs.toLocaleString('id-ID'), l:'Error (>=400)', cls: errs>0?'err':''},
+    {n: ips, l:'IP unik', cls:''},
+    {n: paths, l:'Endpoint unik', cls:''},
+    {n: avgSize+' B', l:'Rata-rata ukuran respons', cls:''},
+  ];
+  $('stats').innerHTML = items.map(s=>`<div class="stat ${s.cls}"><b>${s.n}</b><span>${s.l}</span></div>`).join('');
+}
+
+function renderChips(){
+  const chips = [];
+  if (S.from != null) chips.push(`<span class="chip">Rentang waktu dipilih <button data-clear="time" aria-label="Hapus">✕</button></span>`);
+  if (S.status) chips.push(`<span class="chip">Status ${S.status}xx <button data-clear="status">✕</button></span>`);
+  if (S.method) chips.push(`<span class="chip">Method ${esc(S.method)} <button data-clear="method">✕</button></span>`);
+  $('chips').innerHTML = chips.join('');
+}
+
+function sortRows(rows){
+  const arr = rows.slice();
+  if (S.sort === 'count') arr.sort((a,b)=>b.count-a.count);
+  else if (S.sort === 'last') arr.sort((a,b)=>b.last-a.last);
+  else arr.sort((a,b)=>a.first-b.first);
+  return arr;
+}
+
+function renderEndpointView(rows){
+  if (!rows.length) return `<div class="empty">Tidak ada data untuk filter ini.</div>`;
+  const sorted = sortRows(rows);
+  const max = sorted[0].count;
+  return `<table><thead><tr><th>Jumlah</th><th>Method</th><th>Path</th><th>Status</th><th>IP unik</th><th>Terakhir</th></tr></thead><tbody>`+
+   sorted.map(g=>`<tr data-open="${g.id}" tabindex="0">
+     <td><div class="cnt">×${g.count.toLocaleString('id-ID')}</div><div class="cbar" style="width:${Math.max(8,g.count/max*56)}px"></div></td>
+     <td>${mbadge(g.method)}</td>
+     <td class="path-c mono">${esc(g.path)}</td>
+     <td>${sbadge(g.status)}</td>
+     <td>${g.ipCount}</td>
+     <td class="mono">${fmt(g.last,true)}</td>
+   </tr>`).join('') + `</tbody></table>`;
+}
+function renderAggView(rows, field){
+  if (!rows.length) return `<div class="empty">Tidak ada data untuk filter ini.</div>`;
+  const m = {};
+  const add = (key, count, g) => {
+    const e = m[key] || (m[key] = {key, count:0, groups:0, paths:new Set()});
+    e.count += count; e.groups++; e.paths.add(g.path);
+  };
+  rows.forEach(g => {
+    if (field === 'status') add(String(g.status), g.count, g);
+    else if (field === 'ip') g.ips.forEach(ip => add(ip, g.count, g)); // per-IP tidak dipecah presisi, dihitung penuh per grup yang memuatnya
+    else if (field === 'ua') g.uas.forEach(u => add(u.ua, u.count, g)); // presisi: jumlah request nyata per User-Agent
+  });
+  const list = Object.values(m).sort((a,b)=>b.count-a.count);
+  const max = list[0].count;
+  const head = field === 'status' ? 'Status code' : field === 'ip' ? 'Alamat IP' : 'User-Agent';
+  return `<table><thead><tr><th>Jumlah</th><th>${head}</th><th>Endpoint terlibat</th><th>Contoh path</th></tr></thead><tbody>`+
+   list.map(e=>{
+     let keyCell;
+     if (field==='status') keyCell = sbadge(+e.key);
+     else if (field==='ip') keyCell = `<span class="mono">${esc(e.key)}</span>`;
+     else keyCell = `<div>${esc(shortUa(e.key))}</div><div class="mono" title="${esc(e.key)}" style="color:var(--muted);font-size:11.5px;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.key)}</div>`;
+     return `<tr data-agg="${esc(e.key)}" data-field="${field}" tabindex="0">
+     <td><div class="cnt">×${e.count.toLocaleString('id-ID')}</div><div class="cbar" style="width:${Math.max(8,e.count/max*56)}px"></div></td>
+     <td>${keyCell}</td>
+     <td>${e.groups}</td>
+     <td class="mono" style="color:var(--muted)">${[...e.paths].slice(0,2).map(esc).join(', ')}${e.paths.size>2?' …':''}</td>
+   </tr>`;
+   }).join('') + `</tbody></table>`;
+}
+
+function render(){
+  const base = baseFiltered(), rows = withTime(base);
+  renderStats(rows); renderTimeline(base); renderChips();
+  $('tablewrap').innerHTML = S.view === 'endpoint' ? renderEndpointView(rows) : renderAggView(rows, S.view);
+  document.querySelectorAll('.views button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view===S.view)));
+}
+
+// ---------- drawer ----------
+function occHtml(g){
+  const b = buckets(g.occ, TMIN, TMAX);
+  const sorted = g.occ.slice().sort((a,b)=>b-a);
+  return `<div class="tl mini">${tlHtml(b,false)}</div>
+   <table><thead><tr><th>Waktu</th></tr></thead><tbody>
+   ${sorted.slice(0,60).map(t=>`<tr style="cursor:default"><td class="mono">${fmt(t,true)}</td></tr>`).join('')}
+   </tbody></table>
+   <div class="pad" style="color:var(--muted);font-size:12.5px">Menampilkan ${Math.min(60,sorted.length)} dari ${g.count.toLocaleString('id-ID')} kejadian${g.count>g.occ.length?' (laporan menyimpan sebagian waktu, hitungan tetap akurat)':''}.</div>`;
+}
+function samplesHtml(g){
+  if (!g.samples.length) return `<div class="empty">Tidak ada contoh baris log tersimpan.</div>`;
+  if (openSample >= g.samples.length) openSample = 0;
+  const s = g.samples[openSample];
+  return `<div class="samples">${g.samples.map((x,i)=>`<button data-sample="${i}" aria-pressed="${i===openSample}">#${i+1} · ${fmt(x.t,true)}</button>`).join('')}</div>
+   <div class="rawbar"><span>IP: ${esc(s.ip)} · Ukuran: ${esc(s.size)} B</span><button class="btn" id="copyraw">Salin</button></div>
+   <pre class="raw mono" id="rawpre">${esc(s.raw)}</pre>
+   ${s.referer && s.referer !== '-' ? `<div style="margin-top:8px;font-size:12.5px;color:var(--muted)">Referer: <span class="mono">${esc(s.referer)}</span></div>` : ''}
+   <div style="margin-top:4px;font-size:12.5px;color:var(--muted);word-break:break-all">User-Agent: <span class="mono">${esc(s.ua)}</span></div>`;
+}
+function searchHtml(g){
+  if (!g.searchTerms.length) return `<div class="empty">Tidak ada parameter pencarian (search=) pada endpoint ini.</div>`;
+  const sorted = g.searchTerms.slice().sort((a,b)=>b.count-a.count);
+  return `<table><thead><tr><th>Kata kunci</th><th style="text-align:right">Jumlah</th></tr></thead><tbody>
+   ${sorted.map(s=>`<tr style="cursor:default"><td class="mono">${esc(s.term)}</td><td style="text-align:right">${s.count}</td></tr>`).join('')}
+   </tbody></table>`;
+}
+function uaHtml(g){
+  if (!g.uas.length) return `<div class="empty">Tidak ada data User-Agent pada endpoint ini.</div>`;
+  const sorted = g.uas.slice().sort((a,b)=>b.count-a.count);
+  return `<table><thead><tr><th>User-Agent</th><th style="text-align:right">Jumlah</th></tr></thead><tbody>
+   ${sorted.map(u=>`<tr style="cursor:default">
+     <td><div>${esc(shortUa(u.ua))}</div><div class="mono" style="color:var(--muted);font-size:11.5px;word-break:break-all">${esc(u.ua)}</div></td>
+     <td style="text-align:right">${u.count}</td>
+   </tr>`).join('')}
+   </tbody></table>`;
+}
+function drawerHtml(g){
+  const tabs = [['occ','Kejadian ('+g.count.toLocaleString('id-ID')+')'],['samples','Contoh raw log'],['search','Kata kunci pencarian'],['ua','User-Agent']];
+  let body = '';
+  if (openTab==='occ') body = occHtml(g);
+  else if (openTab==='samples') body = samplesHtml(g);
+  else if (openTab==='search') body = searchHtml(g);
+  else body = uaHtml(g);
+  return `<div class="dhead"><div><div style="margin-bottom:4px">${mbadge(g.method)}${sbadge(g.status)}</div>
+      <h3 class="mono">${esc(g.path)}</h3><div style="color:var(--muted);font-size:13px;margin-top:2px">${g.ipCount} IP unik · rata-rata ${g.avgSize} B</div></div>
+      <button class="x" id="dclose" aria-label="Tutup">✕</button></div>
+   <div class="dbody">
+    <div class="ov">
+      <div><small>Jumlah request</small><span><b>×${g.count.toLocaleString('id-ID')}</b></span></div>
+      <div><small>Pertama terlihat</small><span>${fmt(g.first,true)}</span></div>
+      <div><small>Terakhir terlihat</small><span>${fmt(g.last,true)}</span></div>
+      <div><small>IP contoh</small><span class="mono">${g.ips.slice(0,3).map(esc).join(', ')}${g.ipCount>3?' …':''}</span></div>
+    </div>
+    <div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${openTab===k}">${l}</button>`).join('')}</div>
+    <div>${body}</div>
+   </div>`;
+}
+function openDrawer(id, keep){
+  const g = DATA.find(x=>x.id===id); if (!g) return;
+  if (!keep || openId !== id) { openTab = keep ? openTab : 'occ'; openSample = 0; }
+  openId = id;
+  const d = $('drawer');
+  d.innerHTML = drawerHtml(g);
+  d.classList.add('open'); d.setAttribute('aria-hidden','false');
+  $('scrim').classList.add('open');
+  $('dclose').focus({preventScroll:true});
+}
+function closeDrawer(){
+  openId = null;
+  $('drawer').classList.remove('open');
+  $('drawer').setAttribute('aria-hidden','true');
+  $('scrim').classList.remove('open');
+}
+
+// ---------- filter UI ----------
+function fillSelect(id, label, values){
+  $(id).innerHTML = `<option value="">${label}</option>` + values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+}
+function initFilters(){
+  fillSelect('f-status', 'Semua status', [...new Set(DATA.map(g=>String(Math.floor(g.status/100))))].sort().map(s=>s+'xx'));
+  // perbaiki value select agar tanpa 'xx'
+  $('f-status').querySelectorAll('option').forEach(o=>{ if(o.value) o.value = o.value.replace('xx',''); });
+  fillSelect('f-method', 'Semua method', [...new Set(DATA.map(g=>g.method))].sort());
+}
+function resetState(){
+  Object.assign(S, {q:'', status:'', method:'', from:null, to:null});
+  $('q').value=''; $('f-status').value=''; $('f-method').value='';
+  render();
+}
+function header(){
+  const m = REPORT.meta;
+  $('title').textContent = m.title;
+  const span = `${fmt(TMIN,true)} sampai ${fmt(TMAX).slice(0,5)}`;
+  $('fileinfo').textContent = m.files.join(', ') + '  |  ' + span;
+  const mb = (m.bytes/1048576).toFixed(1);
+  const filt = [];
+  if (m.minStatus) filt.push('status >= '+m.minStatus);
+  if (m.date) filt.push('tanggal '+m.date);
+  if (m.tail) filt.push('hanya '+(m.tail/1048576).toFixed(0)+' MB terakhir');
+  let t = `Dibaca ${m.entries.toLocaleString('id-ID')} baris (${mb} MB), disimpan ${m.kept.toLocaleString('id-ID')} entry ke ${DATA.length.toLocaleString('id-ID')} grup endpoint${filt.length?' ('+filt.join(', ')+')':''}. Dibuat ${m.generatedAt.slice(0,19).replace('T',' ')} UTC dalam ${m.seconds} dtk.`;
+  let warn = false;
+  if (m.unparsed) { t += ` ${m.unparsed.toLocaleString('id-ID')} baris tidak sesuai format combined log dan dilewati.`; }
+  if (m.dropped) { t += ` Peringatan: ${m.dropped.toLocaleString('id-ID')} grup endpoint baru tidak dimasukkan karena batas ${m.maxGroups.toLocaleString('id-ID')} grup tercapai.`; warn = true; }
+  $('modenote').textContent = t;
+  $('modenote').className = 'note' + (warn?' warn':'');
+}
+
+function bind(){
+  $('q').addEventListener('input', e=>{ S.q = e.target.value; render(); });
+  $('f-status').addEventListener('change', e=>{ S.status = e.target.value; render(); });
+  $('f-method').addEventListener('change', e=>{ S.method = e.target.value; render(); });
+  $('sort').addEventListener('change', e=>{ S.sort = e.target.value; render(); });
+  $('reset').addEventListener('click', resetState);
+  $('theme').addEventListener('click', ()=>{
+    const r = document.documentElement;
+    const dark = r.dataset.theme ? r.dataset.theme==='dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    r.dataset.theme = dark ? 'light' : 'dark';
+  });
+  $('scrim').addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', e=>{
+    if (e.key==='Escape') closeDrawer();
+    if ((e.key==='Enter'||e.key===' ') && e.target.matches('tr[data-open],tr[data-agg]')) { e.preventDefault(); e.target.click(); }
+  });
+  $('tl').addEventListener('click', e=>{
+    const b = e.target.closest('[data-b]'); if (!b || !CUR_B) return;
+    const x = CUR_B.arr[+b.dataset.b], to = x.e - 1;
+    if (S.from===x.s && S.to===to) { S.from = S.to = null; }
+    else { S.from = x.s; S.to = to; }
+    render();
+  });
+  $('chips').addEventListener('click', e=>{
+    const b = e.target.closest('[data-clear]'); if (!b) return;
+    if (b.dataset.clear==='time') { S.from = S.to = null; }
+    else if (b.dataset.clear==='status') { S.status=''; $('f-status').value=''; }
+    else if (b.dataset.clear==='method') { S.method=''; $('f-method').value=''; }
+    render();
+  });
+  document.querySelector('.views').addEventListener('click', e=>{
+    const b = e.target.closest('[data-view]'); if (!b) return; S.view = b.dataset.view; render();
+  });
+  $('tablewrap').addEventListener('click', e=>{
+    const r = e.target.closest('tr[data-open]'); if (r) { openDrawer(r.dataset.open); return; }
+    const a = e.target.closest('tr[data-agg]');
+    if (a) {
+      if (a.dataset.field === 'status') { S.status = a.dataset.agg; $('f-status').value = a.dataset.agg; }
+      else { S.q = a.dataset.agg; $('q').value = a.dataset.agg; }
+      S.view = 'endpoint';
+      render();
+    }
+  });
+  $('drawer').addEventListener('click', e=>{
+    if (e.target.closest('#dclose')) { closeDrawer(); return; }
+    const t = e.target.closest('[data-tab]'); if (t) { openTab = t.dataset.tab; openDrawer(openId, true); return; }
+    const sm = e.target.closest('[data-sample]'); if (sm) { openSample = +sm.dataset.sample; openDrawer(openId, true); return; }
+    if (e.target.closest('#copyraw')) {
+      const txt = $('rawpre').textContent, btn = e.target.closest('#copyraw');
+      const done = () => { btn.textContent='Tersalin'; setTimeout(()=>btn.textContent='Salin',1400); };
+      const fb = () => { const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');done();}catch(_){btn.textContent='Gagal';} ta.remove(); };
+      try { navigator.clipboard.writeText(txt).then(done, fb); } catch(_) { fb(); }
+    }
+  });
+}
+
+if (!REPORT) {
+  document.body.innerHTML = '<div class="wrap"><div class="note warn">Laporan ini belum berisi data. Jalankan <code>bun src/nginxlogreport.ts access.log</code> untuk membuatnya.</div></div>';
+} else {
+  build(); header(); initFilters(); bind(); render();
+}
+</script>
+</body>
+</html>
