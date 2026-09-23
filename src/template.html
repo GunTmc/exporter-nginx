@@ -134,7 +134,10 @@ pre.raw{background:var(--bg);border:1px solid var(--border);border-radius:8px;pa
       <h1 id="title">Nginx Access Log Report</h1>
       <div class="sub" id="fileinfo"></div>
     </div>
-    <button class="btn" id="theme">Tema</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="tz">Waktu: WIB (UTC+7)</button>
+      <button class="btn" id="theme">Tema</button>
+    </div>
   </div>
 
   <div class="note" id="modenote"></div>
@@ -183,11 +186,17 @@ const REPORT = /*__DATA__*/null;
 
 const $ = id => document.getElementById(id);
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Baris log nginx dicatat dengan offset lokal (mis. +0700/WIB) lalu disimpan sebagai epoch UTC;
+// semua tampilan waktu digeser balik ke offset ini supaya cocok dengan jam di log aslinya.
+// Tombol "Waktu" mengganti nilai ini lalu me-render ulang header+tabel+drawer.
+let TZ_OFFSET_MIN = 420; // WIB = UTC+7; 0 = UTC
+const tzLabel = () => TZ_OFFSET_MIN === 0 ? 'UTC' : 'WIB (UTC+7)';
 function fmt(ts, withDate){
-  const d = new Date(ts*1000);
+  const d = new Date((ts + TZ_OFFSET_MIN*60)*1000);
   const time = d.toISOString().slice(11,19);
   return withDate ? d.toISOString().slice(0,10)+' '+time : time;
 }
+function fmtIso(iso){ return fmt(Math.floor(new Date(iso).getTime()/1000), true); }
 function mbadge(m){ return `<span class="badge b-${esc(m)}">${esc(m)}</span>`; }
 function sbadge(s){ const bucket = Math.floor(s/100); return `<span class="badge b-${bucket}">${s}</span>`; }
 function shortUa(ua){
@@ -456,7 +465,7 @@ function header(){
   if (m.minStatus) filt.push('status >= '+m.minStatus);
   if (m.date) filt.push('tanggal '+m.date);
   if (m.tail) filt.push('hanya '+(m.tail/1048576).toFixed(0)+' MB terakhir');
-  let t = `Dibaca ${m.entries.toLocaleString('id-ID')} baris (${mb} MB), disimpan ${m.kept.toLocaleString('id-ID')} entry ke ${DATA.length.toLocaleString('id-ID')} grup endpoint${filt.length?' ('+filt.join(', ')+')':''}. Dibuat ${m.generatedAt.slice(0,19).replace('T',' ')} UTC dalam ${m.seconds} dtk.`;
+  let t = `Dibaca ${m.entries.toLocaleString('id-ID')} baris (${mb} MB), disimpan ${m.kept.toLocaleString('id-ID')} entry ke ${DATA.length.toLocaleString('id-ID')} grup endpoint${filt.length?' ('+filt.join(', ')+')':''}. Dibuat ${fmtIso(m.generatedAt)} ${tzLabel()} dalam ${m.seconds} dtk.`;
   let warn = false;
   if (m.unparsed) { t += ` ${m.unparsed.toLocaleString('id-ID')} baris tidak sesuai format combined log dan dilewati.`; }
   if (m.dropped) { t += ` Peringatan: ${m.dropped.toLocaleString('id-ID')} grup endpoint baru tidak dimasukkan karena batas ${m.maxGroups.toLocaleString('id-ID')} grup tercapai.`; warn = true; }
@@ -470,6 +479,11 @@ function bind(){
   $('f-method').addEventListener('change', e=>{ S.method = e.target.value; render(); });
   $('sort').addEventListener('change', e=>{ S.sort = e.target.value; render(); });
   $('reset').addEventListener('click', resetState);
+  $('tz').addEventListener('click', ()=>{
+    TZ_OFFSET_MIN = TZ_OFFSET_MIN === 0 ? 420 : 0;
+    $('tz').textContent = 'Waktu: ' + tzLabel();
+    header(); render();
+  });
   $('theme').addEventListener('click', ()=>{
     const r = document.documentElement;
     const dark = r.dataset.theme ? r.dataset.theme==='dark' : matchMedia('(prefers-color-scheme: dark)').matches;
