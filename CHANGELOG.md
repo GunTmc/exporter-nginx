@@ -1,5 +1,20 @@
 # Riwayat perubahan
 
+## [1.0.1] - 2026-09-28
+
+### Ditambahkan
+
+- Filter rentang waktu **Dari** / **Sampai** (`datetime-local`) di laporan, mengikuti zona waktu
+  tampilan (WIB/UTC), tersinkron dengan klik batang timeline, dan tampil lengkap di chip filter.
+
+### Diperbaiki
+
+- Tabel per endpoint rusak (kolom terdorong keluar layar) saat diurutkan Terbaru/Terlama: lebar
+  bar jumlah diskalakan dari baris pertama, bukan jumlah terbesar.
+- Urutan Terlama/Terbaru tampak salah karena hanya kolom "Terakhir" yang ditampilkan: kini ada
+  kolom Pertama dan Terakhir, penanda kolom urutan, dan urutan kedua berdasarkan jumlah.
+- Filter waktu tidak lagi melewatkan grup yang kejadian lamanya tidak tersimpan di `occ`.
+
 ## [1.0.0] - 2026-09-23
 
 Rilis awal versi production-ready, ditulis ulang total dari prototipe `nginxlogreport.js` /

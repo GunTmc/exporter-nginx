@@ -1,6 +1,6 @@
 {
   "name": "nginxlogreport",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Laporan HTML dari access log nginx: grup per endpoint/status/IP/User-Agent, timeline, filter, tanpa server",
   "bin": {
     "nginxlogreport": "./src/nginxlogreport.ts"
