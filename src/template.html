@@ -88,7 +88,7 @@ tbody tr{cursor:pointer}
 tbody tr:hover{background:var(--panel2)}
 tbody tr:last-child td{border-bottom:0}
 .cnt{font-weight:700;font-size:16px;white-space:nowrap}
-.cbar{height:4px;border-radius:2px;background:var(--accent);margin-top:4px;opacity:.7}
+.cbar{height:4px;border-radius:2px;background:var(--accent);margin-top:4px;opacity:.7;max-width:56px}
 .path-c{font-weight:600;word-break:break-all;max-width:420px}
 .empty{padding:32px 14px;text-align:center;color:var(--muted)}
 
@@ -155,11 +155,13 @@ pre.raw{background:var(--bg);border:1px solid var(--border);border-radius:8px;pa
       <input type="search" id="q" placeholder="Cari path, IP, atau kata kunci pencarian…" aria-label="Cari">
       <select id="f-status" aria-label="Status"></select>
       <select id="f-method" aria-label="Method"></select>
+      <label>Dari <input type="datetime-local" id="f-from" step="1"></label>
+      <label>Sampai <input type="datetime-local" id="f-to" step="1"></label>
       <label>Urutkan
         <select id="sort">
           <option value="count">Jumlah terbanyak</option>
-          <option value="last">Terbaru</option>
-          <option value="first">Terlama</option>
+          <option value="last">Terbaru (terakhir terlihat)</option>
+          <option value="first">Terlama (pertama terlihat)</option>
         </select>
       </label>
       <button class="btn" id="reset">Reset filter</button>
@@ -248,7 +250,27 @@ function baseFiltered(){
 }
 function withTime(rows){
   if (S.from == null && S.to == null) return rows;
-  return rows.filter(g => g.occ.some(t => (S.from==null||t>=S.from) && (S.to==null||t<=S.to)));
+  const lo = S.from ?? -Infinity, hi = S.to ?? Infinity;
+  return rows.filter(g => {
+    if (g.last < lo || g.first > hi) return false;
+    if (g.occ.some(t => t >= lo && t <= hi)) return true;
+    // occ hanya menyimpan N kejadian terakhir; kejadian yang lebih tua (first .. occ[0]) tidak tercatat
+    // satu per satu, jadi grup tetap dianggap masuk bila rentang itu beririsan dengan filter.
+    return g.count > g.occ.length && g.occ.length > 0 && lo <= g.occ[0];
+  });
+}
+// <input type="datetime-local"> dibaca/ditulis dalam zona waktu tampilan (TZ_OFFSET_MIN), bukan zona browser
+function toLocalInput(ts){ return ts == null ? '' : fmt(ts, true).replace(' ', 'T'); }
+function fromLocalInput(v, end){
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(v || '');
+  if (!m) return null;
+  const sec = m[6] != null ? +m[6] : (end ? 59 : 0);
+  return Date.UTC(+m[1], m[2]-1, +m[3], +m[4], +m[5], sec)/1000 - TZ_OFFSET_MIN*60;
+}
+function syncTimeInputs(){
+  $('f-from').value = toLocalInput(S.from);
+  $('f-to').value = toLocalInput(S.to);
+  for (const id of ['f-from','f-to']) { $(id).min = toLocalInput(TMIN); $(id).max = toLocalInput(TMAX); }
 }
 
 function buckets(occArr, tmin, tmax){
@@ -268,7 +290,8 @@ function tlHtml(b, big){
   const max = Math.max(1, ...b.arr.map(x=>x.c));
   return b.arr.map((x,i) => {
     const h = x.c ? Math.max(3, Math.round((x.c/max)*(big?76:36))) : 2;
-    const sel = S.from===x.s && S.to===x.e-1 ? 'sel':'';
+    const timed = S.from != null || S.to != null;
+    const sel = timed && x.s <= (S.to ?? Infinity) && x.e-1 >= (S.from ?? -Infinity) ? 'sel':'';
     const zero = x.c===0 ? 'zero':'';
     return `<button class="bar ${sel} ${zero}" style="height:${h}px" data-b="${i}" ${x.c?'':'disabled'} title="${fmt(x.s,true)} — ${x.c} request"></button>`;
   }).join('');
@@ -300,7 +323,11 @@ function renderStats(rows){
 
 function renderChips(){
   const chips = [];
-  if (S.from != null) chips.push(`<span class="chip">Rentang waktu dipilih <button data-clear="time" aria-label="Hapus">✕</button></span>`);
+  if (S.from != null || S.to != null) {
+    const label = S.from != null && S.to != null ? `${fmt(S.from,true)} – ${fmt(S.to,true)}`
+      : S.from != null ? `mulai ${fmt(S.from,true)}` : `sampai ${fmt(S.to,true)}`;
+    chips.push(`<span class="chip">Waktu ${label} ${tzLabel()} <button data-clear="time" aria-label="Hapus">✕</button></span>`);
+  }
   if (S.status) chips.push(`<span class="chip">Status ${S.status}xx <button data-clear="status">✕</button></span>`);
   if (S.method) chips.push(`<span class="chip">Method ${esc(S.method)} <button data-clear="method">✕</button></span>`);
   $('chips').innerHTML = chips.join('');
@@ -308,23 +335,27 @@ function renderChips(){
 
 function sortRows(rows){
   const arr = rows.slice();
-  if (S.sort === 'count') arr.sort((a,b)=>b.count-a.count);
-  else if (S.sort === 'last') arr.sort((a,b)=>b.last-a.last);
-  else arr.sort((a,b)=>a.first-b.first);
+  const byCount = (a,b) => b.count - a.count;
+  if (S.sort === 'count') arr.sort(byCount);
+  else if (S.sort === 'last') arr.sort((a,b)=>b.last-a.last || byCount(a,b));
+  else arr.sort((a,b)=>a.first-b.first || byCount(a,b));
   return arr;
 }
 
 function renderEndpointView(rows){
   if (!rows.length) return `<div class="empty">Tidak ada data untuk filter ini.</div>`;
   const sorted = sortRows(rows);
-  const max = sorted[0].count;
-  return `<table><thead><tr><th>Jumlah</th><th>Method</th><th>Path</th><th>Status</th><th>IP unik</th><th>Terakhir</th></tr></thead><tbody>`+
+  // skala bar dari jumlah terbesar, bukan baris pertama: saat diurutkan per waktu baris pertama bisa kecil
+  const max = rows.reduce((m,g)=>Math.max(m,g.count), 1);
+  const arrow = k => S.sort === k ? (k === 'first' ? ' ↑' : ' ↓') : '';
+  return `<table><thead><tr><th>Jumlah${arrow('count')}</th><th>Method</th><th>Path</th><th>Status</th><th>IP unik</th><th>Pertama${arrow('first')}</th><th>Terakhir${arrow('last')}</th></tr></thead><tbody>`+
    sorted.map(g=>`<tr data-open="${g.id}" tabindex="0">
      <td><div class="cnt">×${g.count.toLocaleString('id-ID')}</div><div class="cbar" style="width:${Math.max(8,g.count/max*56)}px"></div></td>
      <td>${mbadge(g.method)}</td>
      <td class="path-c mono">${esc(g.path)}</td>
      <td>${sbadge(g.status)}</td>
      <td>${g.ipCount}</td>
+     <td class="mono">${fmt(g.first,true)}</td>
      <td class="mono">${fmt(g.last,true)}</td>
    </tr>`).join('') + `</tbody></table>`;
 }
@@ -341,7 +372,7 @@ function renderAggView(rows, field){
     else if (field === 'ua') g.uas.forEach(u => add(u.ua, u.count, g)); // presisi: jumlah request nyata per User-Agent
   });
   const list = Object.values(m).sort((a,b)=>b.count-a.count);
-  const max = list[0].count;
+  const max = Math.max(1, list[0].count);
   const head = field === 'status' ? 'Status code' : field === 'ip' ? 'Alamat IP' : 'User-Agent';
   return `<table><thead><tr><th>Jumlah</th><th>${head}</th><th>Endpoint terlibat</th><th>Contoh path</th></tr></thead><tbody>`+
    list.map(e=>{
@@ -453,7 +484,7 @@ function initFilters(){
 function resetState(){
   Object.assign(S, {q:'', status:'', method:'', from:null, to:null});
   $('q').value=''; $('f-status').value=''; $('f-method').value='';
-  render();
+  syncTimeInputs(); render();
 }
 function header(){
   const m = REPORT.meta;
@@ -478,11 +509,19 @@ function bind(){
   $('f-status').addEventListener('change', e=>{ S.status = e.target.value; render(); });
   $('f-method').addEventListener('change', e=>{ S.method = e.target.value; render(); });
   $('sort').addEventListener('change', e=>{ S.sort = e.target.value; render(); });
+  const onTimeInput = () => {
+    S.from = fromLocalInput($('f-from').value, false);
+    S.to = fromLocalInput($('f-to').value, true);
+    if (S.from != null && S.to != null && S.from > S.to) { [S.from, S.to] = [S.to, S.from]; syncTimeInputs(); }
+    render();
+  };
+  $('f-from').addEventListener('change', onTimeInput);
+  $('f-to').addEventListener('change', onTimeInput);
   $('reset').addEventListener('click', resetState);
   $('tz').addEventListener('click', ()=>{
     TZ_OFFSET_MIN = TZ_OFFSET_MIN === 0 ? 420 : 0;
     $('tz').textContent = 'Waktu: ' + tzLabel();
-    header(); render();
+    header(); syncTimeInputs(); render();
   });
   $('theme').addEventListener('click', ()=>{
     const r = document.documentElement;
@@ -499,11 +538,11 @@ function bind(){
     const x = CUR_B.arr[+b.dataset.b], to = x.e - 1;
     if (S.from===x.s && S.to===to) { S.from = S.to = null; }
     else { S.from = x.s; S.to = to; }
-    render();
+    syncTimeInputs(); render();
   });
   $('chips').addEventListener('click', e=>{
     const b = e.target.closest('[data-clear]'); if (!b) return;
-    if (b.dataset.clear==='time') { S.from = S.to = null; }
+    if (b.dataset.clear==='time') { S.from = S.to = null; syncTimeInputs(); }
     else if (b.dataset.clear==='status') { S.status=''; $('f-status').value=''; }
     else if (b.dataset.clear==='method') { S.method=''; $('f-method').value=''; }
     render();
@@ -537,7 +576,7 @@ function bind(){
 if (!REPORT) {
   document.body.innerHTML = '<div class="wrap"><div class="note warn">Laporan ini belum berisi data. Jalankan <code>bun src/nginxlogreport.ts access.log</code> untuk membuatnya.</div></div>';
 } else {
-  build(); header(); initFilters(); bind(); render();
+  build(); header(); initFilters(); syncTimeInputs(); bind(); render();
 }
 </script>
 </body>
